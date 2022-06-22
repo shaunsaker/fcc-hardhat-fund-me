@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
 
-import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "./PriceConverter.sol";
 
 error FundMe__NotOwner();
+error FundMe__NotEnough();
+error FundMe__CallFailed();
 
 /** @title A contract for crowd funding
  * @author Shaun Saker
@@ -13,14 +15,17 @@ error FundMe__NotOwner();
 contract FundMe {
     using PriceConverter for uint256;
 
-    address public immutable i_owner;
+    // we prefix immutable variables with i_ so that we can easily see that we do not need to optimise their gas usage
+    address private immutable i_owner;
 
     uint256 public constant MINIMUM_USD = 50 * 1e18;
 
-    address[] public funders;
-    mapping(address => uint256) public addressToAmountFunded;
+    // we predix storage variables with s_ so that it's easy to see (and optimise) where the most gas is used
+    address[] private s_funders;
 
-    AggregatorV3Interface public priceFeed;
+    mapping(address => uint256) private s_addressToAmountFunded;
+
+    AggregatorV3Interface private s_priceFeed;
 
     modifier onlyOwner() {
         // custom error saves gas because we don't need to store the string error message
@@ -36,7 +41,7 @@ contract FundMe {
         // so only they can withdraw the funds
         i_owner = msg.sender;
 
-        priceFeed = AggregatorV3Interface(priceFeedAddress);
+        s_priceFeed = AggregatorV3Interface(priceFeedAddress);
     }
 
     receive() external payable {
@@ -52,32 +57,56 @@ contract FundMe {
         // msg.value is the value in wei of ETH
         // if this condition is not met, all the gas above this line is used
         // and all the gas below this function is reverted aka sent back
-        require(
-            msg.value.getConversionRate(priceFeed) >= MINIMUM_USD,
-            "Didn't send enough!"
-        );
+        if (msg.value.getConversionRate(s_priceFeed) < MINIMUM_USD) {
+            revert FundMe__NotEnough();
+        }
 
-        funders.push(msg.sender);
-        addressToAmountFunded[msg.sender] = msg.value;
+        s_funders.push(msg.sender);
+        s_addressToAmountFunded[msg.sender] = msg.value;
     }
 
     function withdraw() public onlyOwner {
+        // optimise gas usage by loading s_funders into memory
+        // otherwise we read s_funders on every loop
+        address[] memory funders = s_funders;
+
         for (
             uint256 funderIndex = 0;
             funderIndex < funders.length;
             funderIndex++
         ) {
+            // TODO: why do we even need funders? Can't we just use the mapping s_addressToAmountFunded as the addresses are already duplicated tehre?
             address funder = funders[funderIndex];
-            addressToAmountFunded[funder] = 0;
+            s_addressToAmountFunded[funder] = 0;
         }
 
-        // reset the funders array
-        funders = new address[](0);
+        // reset the s_funders array
+        s_funders = new address[](0);
 
-        // call
-        (bool callSuccess, ) = payable(msg.sender).call{
-            value: address(this).balance
-        }("");
-        require(callSuccess, "Call failed");
+        (bool callSuccess, ) = i_owner.call{value: address(this).balance}("");
+
+        if (!callSuccess) {
+            revert FundMe__CallFailed();
+        }
+    }
+
+    function getOwner() public view returns (address) {
+        return i_owner;
+    }
+
+    function getFunder(uint256 index) public view returns (address) {
+        return s_funders[index];
+    }
+
+    function getAddressToAmountFunded(address funder)
+        public
+        view
+        returns (uint256)
+    {
+        return s_addressToAmountFunded[funder];
+    }
+
+    function getPriceFeed() public view returns (AggregatorV3Interface) {
+        return s_priceFeed;
     }
 }
