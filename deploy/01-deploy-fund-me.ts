@@ -1,6 +1,11 @@
 import { network } from "hardhat"
 import { HardhatRuntimeEnvironment } from "hardhat/types"
-import { developmentChains, networkConfig } from "../helper-hardhat-config"
+import {
+    BLOCK_CONFIRMATIONS,
+    developmentChains,
+    networkConfig,
+} from "../helper-hardhat-config"
+import { verify } from "../utils/verify"
 
 module.exports = async ({
     getNamedAccounts,
@@ -21,11 +26,21 @@ module.exports = async ({
     }
 
     // when going for localhost or hardhat network we want to use a mock
+    const fundMeArgs = [ethUsdPriceFeedAddress]
     const fundMe = await deploy("FundMe", {
         from: deployer,
-        args: [ethUsdPriceFeedAddress],
+        args: fundMeArgs,
         log: true,
+        waitConfirmations: BLOCK_CONFIRMATIONS,
     })
+
+    if (
+        !developmentChains.includes(network.name) &&
+        process.env.ETHERSCAN_API_KEY
+    ) {
+        // verify the contract if not in development
+        await verify(fundMe.address, fundMeArgs)
+    }
 
     log("--------------------------------")
 }
