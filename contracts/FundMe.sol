@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
 
+import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
 import "./PriceConverter.sol";
 
-error NotOwner();
+error FundMe__NotOwner();
 
+/** @title A contract for crowd funding
+ * @author Shaun Saker
+ * @notice This contract is to demo a sample funding contract
+ * @dev This implements price feeds as our library */
 contract FundMe {
     using PriceConverter for uint256;
 
@@ -17,12 +22,29 @@ contract FundMe {
 
     AggregatorV3Interface public priceFeed;
 
+    modifier onlyOwner() {
+        // custom error saves gas because we don't need to store the string error message
+        if (msg.sender != i_owner) {
+            revert FundMe__NotOwner();
+        }
+
+        _; // continue with the rest of the code
+    }
+
     constructor(address priceFeedAddress) {
         // when the contract is deployed, we keep track of who deployed it
         // so only they can withdraw the funds
         i_owner = msg.sender;
 
         priceFeed = AggregatorV3Interface(priceFeedAddress);
+    }
+
+    receive() external payable {
+        fund();
+    }
+
+    fallback() external payable {
+        fund();
     }
 
     function fund() public payable {
@@ -52,40 +74,10 @@ contract FundMe {
         // reset the funders array
         funders = new address[](0);
 
-        // actually withdraw the funds
-        // there are 3 options:
-        // transfer, send, call
-
-        // transfer (will automatically revert on failure)
-        // payable(msg.sender).transfer(address(this).balance);
-
-        // send (returns a bool so we need to manually revert the transaction)
-        // bool sendSuccess = payable(msg.sender).send(address(this).balance);
-        // require(sendSuccess, "Send failed");
-
         // call
         (bool callSuccess, ) = payable(msg.sender).call{
             value: address(this).balance
         }("");
         require(callSuccess, "Call failed");
-    }
-
-    modifier onlyOwner() {
-        // require(msg.sender == i_owner, "Sender is not the owner!");
-
-        // custom error saves gas because we don't need to store the string error message
-        if (msg.sender != i_owner) {
-            revert NotOwner();
-        }
-
-        _; // continue with the rest of the code
-    }
-
-    receive() external payable {
-        fund();
-    }
-
-    fallback() external payable {
-        fund();
     }
 }
