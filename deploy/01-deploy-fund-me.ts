@@ -15,8 +15,9 @@ module.exports = async ({
     const { deployer } = await getNamedAccounts()
 
     let ethUsdPriceFeedAddress
+    const isDevelopment = developmentChains.includes(network.name)
 
-    if (developmentChains.includes(network.name)) {
+    if (isDevelopment) {
         // if the contract doesn't exist, we deploy a minimal version of it for our local testing
         const ethUsdAggregator = await deployments.get("MockV3Aggregator")
 
@@ -31,13 +32,10 @@ module.exports = async ({
         from: deployer,
         args: fundMeArgs,
         log: true,
-        waitConfirmations: BLOCK_CONFIRMATIONS,
+        waitConfirmations: !isDevelopment ? BLOCK_CONFIRMATIONS : 1,
     })
 
-    if (
-        !developmentChains.includes(network.name) &&
-        process.env.ETHERSCAN_API_KEY
-    ) {
+    if (!isDevelopment && process.env.ETHERSCAN_API_KEY) {
         // verify the contract if not in development
         await verify(fundMe.address, fundMeArgs)
     }
