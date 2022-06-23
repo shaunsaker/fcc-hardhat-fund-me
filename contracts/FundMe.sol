@@ -62,10 +62,10 @@ contract FundMe {
         }
 
         s_funders.push(msg.sender);
-        s_addressToAmountFunded[msg.sender] = msg.value;
+        s_addressToAmountFunded[msg.sender] += msg.value;
     }
 
-    function withdraw() public onlyOwner {
+    function withdraw() public payable onlyOwner {
         // optimise gas usage by loading s_funders into memory
         // otherwise we read s_funders on every loop
         address[] memory funders = s_funders;
