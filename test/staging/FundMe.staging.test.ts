@@ -8,6 +8,7 @@ developmentChains.includes(network.name)
     : describe("FundMe", () => {
           let fundMe: FundMe
           let deployer: string
+          // TODO: SS it would be cool if we could first fund the account from a faucet programmatically
           const sendValue = ethers.utils.parseEther("0.05")
 
           beforeEach(async () => {
